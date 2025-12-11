@@ -1,59 +1,57 @@
-// src/pages/AllTasks.jsx
 import { useEffect, useState } from "react";
 import { Container, Typography, Button } from "@mui/material";
-import { collection, onSnapshot, updateDoc, doc } from "firebase/firestore";
+import { collection, onSnapshot, updateDoc, doc, deleteDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import TaskList from "../components/TaskList";
+import AddAllTaskDialog from "../components/all/AddAllTaskDialog";
+import EditAllTaskDialog from "../components/all/EditAllTaskDialog";
+import SortAllTasksDialog from "../components/all/SortAllTasksDialog";
+import SearchFilterBar from "../components/SearchFilterBar";
 import { sortTasks } from "../algo/scheduler";
-import SortTaskDialog from "../components/SortTaskDialog";
-import AddTaskDialog from "../components/AddTaskDialog";
-import EditTaskDialog from "../components/EditTaskDialog";
 
 export default function AllTasks() {
-  const [tasks, setTasks] = useState([]);
-  const [openSort, setOpenSort] = useState(false);
+  const [all, setAll] = useState([]);
+  const [visible, setVisible] = useState([]);
   const [openAdd, setOpenAdd] = useState(false);
-  const [editTask, setEditTask] = useState(null);
   const [openEdit, setOpenEdit] = useState(false);
+  const [editTask, setEditTask] = useState(null);
+  const [openSort, setOpenSort] = useState(false);
 
   useEffect(() => {
     const q = collection(db, "tasks");
-    const unsub = onSnapshot(q, snap => {
-      setTasks(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
+    const unsub = onSnapshot(q, snap => setAll(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
     return () => unsub();
   }, []);
 
-  const recommended = sortTasks(tasks);
+  useEffect(() => {
+    setVisible(sortTasks(all));
+  }, [all]);
 
-  async function onDragEnd(newOrder) {
-    // persist manualRank for manual ordering
-    for (let i = 0; i < newOrder.length; i++) {
-      const t = newOrder[i];
-      try {
-        await updateDoc(doc(db, "tasks", t.id), { manualRank: i });
-      } catch (e) {
-        console.error(e);
-      }
-    }
-  }
+  async function onToggleComplete(t) { await updateDoc(doc(db, "tasks", t.id), { completed: !t.completed }); }
+  async function onDelete(t) { await deleteDoc(doc(db, "tasks", t.id)); }
 
-  async function onToggleComplete(task) {
-    await updateDoc(doc(db, "tasks", task.id), { completed: !task.completed });
+  function onSearch(filters) {
+    let list = [...all];
+    if (filters.q) list = list.filter(x => x.title?.toLowerCase().includes(filters.q.toLowerCase()));
+    if (filters.type) list = list.filter(x => x.type === filters.type);
+    if (filters.priority) list = list.filter(x => Number(x.priority) === Number(filters.priority));
+    setVisible(sortTasks(list));
   }
 
   return (
     <Container sx={{ mt: 10 }}>
       <Typography variant="h5">All Tasks</Typography>
-      <Button variant="outlined" sx={{ mr: 1 }} onClick={() => setOpenSort(true)}>Sort</Button>
-      <Button variant="contained" onClick={() => setOpenAdd(true)}>Add Task</Button>
+      <SearchFilterBar onSearch={onSearch} />
+      <Button variant="contained" sx={{ my:2, mr:1 }} onClick={() => setOpenAdd(true)}>Add Task</Button>
+      <Button variant="outlined" sx={{ my:2 }} onClick={() => setOpenSort(true)}>Sort</Button>
 
-      <TaskList tasks={recommended} onDragEnd={onDragEnd} onToggleComplete={onToggleComplete}
-        onEdit={(t)=>{ setEditTask(t); setOpenEdit(true); }} onDelete={async (t)=>{ await updateDoc(doc(db,"tasks", t.id), { deleted: true }) }} />
+      <TaskList tasks={visible} onToggleComplete={onToggleComplete} onEdit={(t)=>{ setEditTask(t); setOpenEdit(true); }} onDelete={onDelete} onDragEnd={async (newOrder)=> {
+        for (let i=0;i<newOrder.length;i++) await updateDoc(doc(db,"tasks", newOrder[i].id), { manualRank: i });
+      }} />
 
-      <SortTaskDialog open={openSort} onClose={() => setOpenSort(false)} tasks={tasks} />
-      <AddTaskDialog open={openAdd} onClose={() => setOpenAdd(false)} defaults={{}} />
-      <EditTaskDialog open={openEdit} onClose={() => setOpenEdit(false)} task={editTask} />
+      <AddAllTaskDialog open={openAdd} onClose={() => setOpenAdd(false)} />
+      <EditAllTaskDialog open={openEdit} onClose={() => setOpenEdit(false)} task={editTask} />
+      <SortAllTasksDialog open={openSort} onClose={() => setOpenSort(false)} tasks={visible} />
     </Container>
   );
 }

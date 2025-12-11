@@ -1,66 +1,54 @@
-// src/pages/TodayTasks.jsx
 import { useEffect, useState } from "react";
 import { Container, Typography, Button } from "@mui/material";
-import { collection, onSnapshot, updateDoc, doc, addDoc } from "firebase/firestore";
+import { collection, onSnapshot, updateDoc, doc, deleteDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import TaskList from "../components/TaskList";
-import AddTaskDialog from "../components/AddTaskDialog";
-import EditTaskDialog from "../components/EditTaskDialog";
+import AddDailyTaskDialog from "../components/daily/AddDailyTaskDialog";
+import EditDailyTaskDialog from "../components/daily/EditDailyTaskDialog";
+import SortDailyTasksDialog from "../components/daily/SortDailyTasksDialog";
 import { autoScheduleToday } from "../algo/autoScheduleToday";
 
 export default function TodayTasks() {
-  const [allTasks, setAllTasks] = useState([]);
-  const [todayTasks, setTodayTasks] = useState([]);
+  const [all, setAll] = useState([]);
+  const [today, setToday] = useState([]);
   const [openAdd, setOpenAdd] = useState(false);
-  const [editTask, setEditTask] = useState(null);
   const [openEdit, setOpenEdit] = useState(false);
-  const [dailyMinutes, setDailyMinutes] = useState(180); // could be user preference later
+  const [editTask, setEditTask] = useState(null);
+  const [openSort, setOpenSort] = useState(false);
+  const [dailyMinutes] = useState(180);
 
   useEffect(() => {
     const q = collection(db, "tasks");
     const unsub = onSnapshot(q, snap => {
-      const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      setAllTasks(docs);
+      setAll(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     });
     return () => unsub();
   }, []);
 
   useEffect(() => {
-    const scheduled = autoScheduleToday(allTasks, { dailyMinutes });
-    // Also ensure micro tasks with deadline today are shown (they will be included by classifier or pool)
-    setTodayTasks(scheduled);
-  }, [allTasks, dailyMinutes]);
+    setToday(autoScheduleToday(all, { dailyMinutes }));
+  }, [all, dailyMinutes]);
 
-  async function onToggleComplete(task) {
-    try {
-      await updateDoc(doc(db, "tasks", task.id), { completed: !task.completed });
-    } catch (e) { console.error(e); }
+  async function toggleComplete(t) {
+    await updateDoc(doc(db, "tasks", t.id), { completed: !t.completed });
+  }
+  async function remove(t) {
+    try { await deleteDoc(doc(db, "tasks", t.id)); } catch (e) { console.error(e); }
   }
 
   return (
     <Container sx={{ mt: 10 }}>
       <Typography variant="h5">Today's Tasks</Typography>
-      <Button variant="contained" sx={{ my: 2 }} onClick={() => setOpenAdd(true)}>Add Task</Button>
+      <Button variant="contained" sx={{ my: 2, mr: 1 }} onClick={() => setOpenAdd(true)}>Add Today's Task</Button>
+      <Button variant="outlined" sx={{ my: 2 }} onClick={() => setOpenSort(true)}>Sort</Button>
 
-      <TaskList
-        tasks={todayTasks}
-        onDragEnd={() => {}}
-        onToggleComplete={onToggleComplete}
-        onEdit={(t) => { setEditTask(t); setOpenEdit(true); }}
-        onDelete={async (t) => { await updateDoc(doc(db,"tasks", t.id), { deleted: true }); }}
-      />
+      <TaskList tasks={today} onToggleComplete={toggleComplete} onEdit={(t)=>{ setEditTask(t); setOpenEdit(true); }} onDelete={remove} onDragEnd={async (newOrder)=> {
+        for (let i=0;i<newOrder.length;i++) await updateDoc(doc(db,"tasks", newOrder[i].id), { manualRank: i });
+      }} />
 
-      <AddTaskDialog
-        open={openAdd}
-        onClose={() => setOpenAdd(false)}
-        defaults={{ type: "today", deadline: new Date().toISOString().slice(0,10) }}
-      />
-
-      <EditTaskDialog
-        open={openEdit}
-        onClose={() => setOpenEdit(false)}
-        task={editTask}
-      />
+      <AddDailyTaskDialog open={openAdd} onClose={() => setOpenAdd(false)} />
+      <EditDailyTaskDialog open={openEdit} onClose={() => setOpenEdit(false)} task={editTask} />
+      <SortDailyTasksDialog open={openSort} onClose={() => setOpenSort(false)} tasks={today} />
     </Container>
   );
 }

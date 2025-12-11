@@ -1,49 +1,37 @@
 // src/components/TaskList.jsx
 import { DndContext, closestCenter } from "@dnd-kit/core";
-import {
-  SortableContext,
-  arrayMove,
-  rectSortingStrategy,
-  useSortable,
-} from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
-import { Box } from "@mui/material";
+import { SortableContext, arrayMove } from "@dnd-kit/sortable";
 import TaskCard from "./TaskCard";
 
-function SortableItem({ item, index, onToggleComplete, onEdit, onDelete }) {
-  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: item.id });
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  };
+export default function TaskList({
+  tasks,
+  onDragEnd = () => {},
+  onEdit = () => {},
+  onDelete = () => {},
+  onToggleComplete = () => {},
+}) {
 
-  return (
-    <div ref={setNodeRef} style={style} {...attributes}>
-      <div {...listeners}>
-        <TaskCard task={item} onToggleComplete={onToggleComplete} onEdit={onEdit} onDelete={onDelete} />
-      </div>
-    </div>
-  );
-}
-
-export default function TaskList({ tasks, onDragEnd, onToggleComplete, onEdit, onDelete }) {
-  function handleDragEnd(event) {
-    const { active, over } = event;
+  function handleDragEnd(e) {
+    const { active, over } = e;
     if (!over || active.id === over.id) return;
     const oldIndex = tasks.findIndex(t => t.id === active.id);
     const newIndex = tasks.findIndex(t => t.id === over.id);
-    const newTasks = arrayMove(tasks, oldIndex, newIndex);
-    onDragEnd && onDragEnd(newTasks);
+    const reordered = arrayMove(tasks, oldIndex, newIndex);
+    onDragEnd(reordered);
   }
 
   return (
     <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-      <SortableContext items={tasks.map(t => t.id)} strategy={rectSortingStrategy}>
-        <Box>
-          {tasks.map((t, idx) => (
-            <SortableItem key={t.id} item={t} index={idx} onToggleComplete={onToggleComplete} onEdit={onEdit} onDelete={onDelete} />
-          ))}
-        </Box>
+      <SortableContext items={tasks.map(t => t.id)}>
+        {tasks.map(t => (
+          <TaskCard
+            key={t.id}
+            task={t}
+            onEdit={() => onEdit(t)}
+            onDelete={() => onDelete(t)}
+            onToggle={() => onToggleComplete(t)}
+          />
+        ))}
       </SortableContext>
     </DndContext>
   );
