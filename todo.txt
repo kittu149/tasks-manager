@@ -1,0 +1,8 @@
+Enable usage by multiple users
+
+Correct sorting of tasks into the three sections
+
+UI/UX
+
+Side navbar hovering animation need work to be done
+
